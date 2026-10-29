@@ -48,6 +48,7 @@ export default function Home() {
   const [widthMm, setWidthMm] = useState(10);
   const [mode, setMode] = useState<"Realista" | "Transparente" | "Holográfico">("Realista");
   const [posts, setPosts] = useState<DentalPost[]>([{ id: 1, ...DEFAULT_POST }]);
+  const [diameterDrafts, setDiameterDrafts] = useState<Record<number, string>>({});
 
   const selected = useMemo(
     () => TEETH.find(([id]) => id === toothId)?.[1] ?? "Dente selecionado",
@@ -130,12 +131,12 @@ export default function Home() {
               <div className="grid grid-cols-2 gap-3">
                 <div>
                   <label className="label" htmlFor="height">Altura (mm)</label>
-                  <input id="height" className="field" type="number" min="1" max="40" step="0.1" value={heightMm}
+                  <input id="height" className="field [appearance:textfield] [&::-webkit-inner-spin-button]:appearance-none [&::-webkit-outer-spin-button]:appearance-none" type="number" min="1" max="40" step="0.1" value={heightMm}
                     onChange={(e) => setHeightMm(e.target.value === "" ? 1 : Math.min(40, Math.max(1, Number(e.target.value))))} />
                 </div>
                 <div>
                   <label className="label" htmlFor="width">Largura (mm)</label>
-                  <input id="width" className="field" type="number" min="1" max="25" step="0.1" value={widthMm}
+                  <input id="width" className="field [appearance:textfield] [&::-webkit-inner-spin-button]:appearance-none [&::-webkit-outer-spin-button]:appearance-none" type="number" min="1" max="25" step="0.1" value={widthMm}
                     onChange={(e) => setWidthMm(e.target.value === "" ? 1 : Math.min(25, Math.max(1, Number(e.target.value))))} />
                 </div>
               </div>
@@ -183,23 +184,31 @@ export default function Home() {
                         <label className="label">Comprimento (mm)</label>
                         <input
                           className="field"
-                          type="number"
-                          min="0.1"
-                          step="0.1"
-                          value={post.lengthMm}
+                          type="text"
+                          inputMode="decimal"
+                          pattern="[0-9]*[.,]?[0-9]*"
+                          value={post.lengthMm === 0 ? "" : String(post.lengthMm).replace(".", ",")}
                           onChange={(e) => {
-                            const value = e.target.value;
-                            if (value === "") {
+                            const raw = e.target.value.replace(",", ".");
+                            if (raw === "" || raw === "." ) {
                               setPosts((current) => current.map((item) =>
                                 item.id === post.id ? { ...item, lengthMm: 0 } : item
                               ));
                               return;
                             }
-                            updatePost(post.id, "lengthMm", Math.max(0.1, Number(value)));
+                            if (/^\d*\.?\d*$/.test(raw)) {
+                              const parsed = Number(raw);
+                              setPosts((current) => current.map((item) =>
+                                item.id === post.id ? { ...item, lengthMm: parsed } : item
+                              ));
+                            }
                           }}
                           onBlur={(e) => {
-                            if (e.target.value === "" || Number(e.target.value) <= 0) {
+                            const parsed = Number(e.target.value.replace(",", "."));
+                            if (e.target.value.trim() === "" || !Number.isFinite(parsed) || parsed <= 0) {
                               updatePost(post.id, "lengthMm", 0.1);
+                            } else {
+                              updatePost(post.id, "lengthMm", parsed);
                             }
                           }}
                         />
@@ -208,41 +217,106 @@ export default function Home() {
                         <label className="label">Diâmetro (mm)</label>
                         <input
                           className="field"
-                          type="number"
-                          min="0.1"
-                          step="0.1"
-                          value={post.diameterMm}
+                          type="text"
+                          inputMode="decimal"
+                          pattern="[0-9]*[.,]?[0-9]*"
+                          value={diameterDrafts[post.id] ?? String(post.diameterMm).replace(".", ",")}
                           onChange={(e) => {
-                            const value = e.target.value;
-                            if (value === "") {
-                              setPosts((current) => current.map((item) =>
-                                item.id === post.id ? { ...item, diameterMm: 0 } : item
-                              ));
-                              return;
+                            const typed = e.target.value;
+                            // Mantém o texto digitado (inclusive vazio ou "0,") sem o React
+                            // substituir a vírgula enquanto a pessoa ainda está editando.
+                            if (/^\d*(?:[,.]\d*)?$/.test(typed)) {
+                              setDiameterDrafts((current) => ({ ...current, [post.id]: typed }));
+                              const normalized = typed.replace(",", ".");
+                              if (normalized !== "" && normalized !== "." && normalized !== "0.") {
+                                const parsed = Number(normalized);
+                                if (Number.isFinite(parsed)) {
+                                  updatePost(post.id, "diameterMm", parsed);
+                                }
+                              } else if (normalized === "") {
+                                updatePost(post.id, "diameterMm", 0);
+                              }
                             }
-                            updatePost(post.id, "diameterMm", Math.max(0.1, Number(value)));
                           }}
                           onBlur={(e) => {
-                            if (e.target.value === "" || Number(e.target.value) <= 0) {
+                            const typed = e.currentTarget.value.trim();
+                            const parsed = Number(typed.replace(",", "."));
+                            if (typed === "" || !Number.isFinite(parsed) || parsed <= 0) {
                               updatePost(post.id, "diameterMm", 0.1);
+                              setDiameterDrafts((current) => {
+                                const next = { ...current };
+                                delete next[post.id];
+                                return next;
+                              });
+                            } else {
+                              updatePost(post.id, "diameterMm", parsed);
+                              setDiameterDrafts((current) => {
+                                const next = { ...current };
+                                delete next[post.id];
+                                return next;
+                              });
                             }
                           }}
                         />
                       </div>
                       <div className="col-span-2">
                         <label className="label">Distância da ponta do pino ao ápice (mm)</label>
-                        <input className="field" type="number" min="0" step="0.1" value={post.apexDistanceMm}
+                        <input className="field [appearance:textfield] [&::-webkit-inner-spin-button]:appearance-none [&::-webkit-outer-spin-button]:appearance-none" type="number" min="0" step="0.1" value={post.apexDistanceMm}
                           onChange={(e) => updatePost(post.id, "apexDistanceMm", Math.max(0, Number(e.target.value) || 0))} />
                       </div>
                       <div>
                         <label className="label">Ajuste lateral X (mm)</label>
-                        <input className="field" type="number" step="0.1" value={post.offsetXmm}
-                          onChange={(e) => updatePost(post.id, "offsetXmm", Number(e.target.value) || 0)} />
+                        <div className="flex overflow-hidden rounded-lg border border-slate-700 bg-slate-900">
+                          <button
+                            type="button"
+                            aria-label="Diminuir ajuste X"
+                            title="Diminuir X em 0,1 mm"
+                            className="flex h-11 w-11 shrink-0 items-center justify-center border-r border-slate-700 text-xl font-bold text-slate-200 hover:bg-slate-800 active:bg-slate-700"
+                            onClick={() => updatePost(post.id, "offsetXmm", Number((post.offsetXmm - 0.1).toFixed(2)))}
+                          >−</button>
+                          <input
+                            className="min-w-0 w-full bg-transparent px-1 text-center text-base text-white outline-none"
+                            type="number"
+                            inputMode="decimal"
+                            step="0.1"
+                            value={post.offsetXmm}
+                            onChange={(e) => updatePost(post.id, "offsetXmm", Number(e.target.value.replace(",", ".")) || 0)}
+                          />
+                          <button
+                            type="button"
+                            aria-label="Aumentar ajuste X"
+                            title="Aumentar X em 0,1 mm"
+                            className="flex h-11 w-11 shrink-0 items-center justify-center border-l border-slate-700 text-xl font-bold text-slate-200 hover:bg-slate-800 active:bg-slate-700"
+                            onClick={() => updatePost(post.id, "offsetXmm", Number((post.offsetXmm + 0.1).toFixed(2)))}
+                          >+</button>
+                        </div>
                       </div>
                       <div>
                         <label className="label">Ajuste lateral Z (mm)</label>
-                        <input className="field" type="number" step="0.1" value={post.offsetZmm}
-                          onChange={(e) => updatePost(post.id, "offsetZmm", Number(e.target.value) || 0)} />
+                        <div className="flex overflow-hidden rounded-lg border border-slate-700 bg-slate-900">
+                          <button
+                            type="button"
+                            aria-label="Diminuir ajuste Z"
+                            title="Diminuir Z em 0,1 mm"
+                            className="flex h-11 w-11 shrink-0 items-center justify-center border-r border-slate-700 text-xl font-bold text-slate-200 hover:bg-slate-800 active:bg-slate-700"
+                            onClick={() => updatePost(post.id, "offsetZmm", Number((post.offsetZmm - 0.1).toFixed(2)))}
+                          >−</button>
+                          <input
+                            className="min-w-0 w-full bg-transparent px-1 text-center text-base text-white outline-none"
+                            type="number"
+                            inputMode="decimal"
+                            step="0.1"
+                            value={post.offsetZmm}
+                            onChange={(e) => updatePost(post.id, "offsetZmm", Number(e.target.value.replace(",", ".")) || 0)}
+                          />
+                          <button
+                            type="button"
+                            aria-label="Aumentar ajuste Z"
+                            title="Aumentar Z em 0,1 mm"
+                            className="flex h-11 w-11 shrink-0 items-center justify-center border-l border-slate-700 text-xl font-bold text-slate-200 hover:bg-slate-800 active:bg-slate-700"
+                            onClick={() => updatePost(post.id, "offsetZmm", Number((post.offsetZmm + 0.1).toFixed(2)))}
+                          >+</button>
+                        </div>
                       </div>
                     </div>
                   </div>

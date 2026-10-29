@@ -1,0 +1,1 @@
+Coloque nesta pasta os 16 modelos dentários .glb. Consulte README.md ou execute npm run models:download.
